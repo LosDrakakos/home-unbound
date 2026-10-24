@@ -1,0 +1,15 @@
+{{template "head" .}}
+<main class="login-page">
+  <section class="login-card">
+    <h1>Unbound Manager</h1>
+    <p>Sign in to manage your recursive resolver.</p>
+    {{template "messages" .}}
+    <form method="post" action="/login">
+      <label>
+        Admin password
+        <input type="password" name="password" required autofocus autocomplete="current-password">
+      </label>
+      <button type="submit">Sign in</button>
+    </form>
+  </section>
+{{template "foot" .}}

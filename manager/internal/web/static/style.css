@@ -1,0 +1,369 @@
+:root {
+  color-scheme: light dark;
+  --background: #f4f7fb;
+  --panel: #ffffff;
+  --text: #172033;
+  --muted: #59657a;
+  --accent: #3268d5;
+  --accent-hover: #2454b2;
+  --border: #d8dfeb;
+  --good: #157347;
+  --good-bg: #eaf7f0;
+  --danger: #b42318;
+  --danger-bg: #fff0ef;
+  --code-bg: #101827;
+  --code-text: #dbe7ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.8rem max(1rem, 3vw);
+  background: #14213d;
+  color: #ffffff;
+}
+
+.brand {
+  flex: 0 0 auto;
+  color: #ffffff;
+  font-size: 1.15rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.site-header nav {
+  display: flex;
+  flex: 1;
+  gap: 0.2rem;
+  overflow-x: auto;
+}
+
+.site-header nav a {
+  border-radius: 0.35rem;
+  color: #dbe7ff;
+  padding: 0.45rem 0.6rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-header nav a:hover,
+.site-header nav a[aria-current="page"] {
+  background: #2a3b61;
+  color: #ffffff;
+}
+
+.logout-form {
+  margin: 0;
+}
+
+main {
+  max-width: 1120px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+section,
+.login-card {
+  margin: 1rem 0;
+  padding: 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--panel);
+}
+
+.login-page {
+  max-width: 28rem;
+}
+
+.login-card form {
+  display: grid;
+  gap: 1rem;
+}
+
+h1,
+h2 {
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1.15rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-weight: 650;
+}
+
+input,
+select,
+button,
+.button-link {
+  min-height: 2.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  font: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  background: var(--panel);
+  color: var(--text);
+}
+
+button,
+.button-link {
+  border-color: transparent;
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+}
+
+button:hover,
+.button-link:hover {
+  background: var(--accent-hover);
+  color: #ffffff;
+}
+
+.secondary {
+  background: #415275;
+}
+
+.danger {
+  background: var(--danger);
+}
+
+:focus-visible {
+  outline: 3px solid #7ba6ff;
+  outline-offset: 2px;
+}
+
+.form-grid,
+.grid,
+.conditional-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.inline-form,
+.button-row {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.check {
+  flex-direction: row;
+  align-items: center;
+}
+
+.check input {
+  width: auto;
+}
+
+fieldset {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+legend {
+  padding: 0 0.4rem;
+  font-weight: 700;
+}
+
+.record-form .conditional {
+  display: none;
+}
+
+.record-form:has(select[name="type"] option[value="A"]:checked) .f-value,
+.record-form:has(select[name="type"] option[value="AAAA"]:checked) .f-value,
+.record-form:has(select[name="type"] option[value="CNAME"]:checked) .f-value,
+.record-form:has(select[name="type"] option[value="TXT"]:checked) .f-value,
+.record-form:has(select[name="type"] option[value="PTR"]:checked) .f-value,
+.record-form:has(select[name="type"] option[value="A"]:checked) .f-auto-ptr,
+.record-form:has(select[name="type"] option[value="AAAA"]:checked) .f-auto-ptr {
+  display: flex;
+}
+
+.record-form:has(select[name="type"] option[value="A"]:checked) .help-a,
+.record-form:has(select[name="type"] option[value="AAAA"]:checked) .help-aaaa,
+.record-form:has(select[name="type"] option[value="CNAME"]:checked) .help-cname,
+.record-form:has(select[name="type"] option[value="TXT"]:checked) .help-txt,
+.record-form:has(select[name="type"] option[value="PTR"]:checked) .help-ptr {
+  display: block;
+}
+
+.record-form:has(select[name="type"] option[value="MX"]:checked) .f-mx,
+.record-form:has(select[name="type"] option[value="SRV"]:checked) .f-srv {
+  display: grid;
+}
+
+.record-type-help {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 400;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.65rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+details summary {
+  color: var(--danger);
+  cursor: pointer;
+}
+
+details form {
+  margin-top: 0.6rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--good-bg);
+  color: var(--good);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+pre {
+  padding: 1rem;
+  overflow-wrap: anywhere;
+  border-radius: 0.4rem;
+  background: var(--code-bg);
+  color: var(--code-text);
+  white-space: pre-wrap;
+}
+
+.flash,
+.error,
+.mode {
+  padding: 0.8rem 1rem;
+  border-left: 5px solid var(--accent);
+  border-radius: 0.25rem;
+  background: var(--panel);
+}
+
+.error,
+.bad {
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.good {
+  border-left-color: var(--good);
+  background: var(--good-bg);
+}
+
+footer {
+  padding: 2rem 1rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .site-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .site-header nav {
+    margin: 0 -0.3rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .logout-form button {
+    width: 100%;
+  }
+
+  main {
+    margin: 1rem auto;
+  }
+
+  section {
+    padding: 1rem;
+  }
+
+  .form-grid,
+  .grid,
+  .conditional-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-form,
+  .button-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inline-form > *,
+  .button-row > * {
+    width: 100%;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0d1118;
+    --panel: #171d27;
+    --text: #e7ecf5;
+    --muted: #a9b4c6;
+    --border: #344057;
+    --accent: #5f8fea;
+    --accent-hover: #7da5f4;
+    --good-bg: #102a20;
+    --danger-bg: #351816;
+  }
+}

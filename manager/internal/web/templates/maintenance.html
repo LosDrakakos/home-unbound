@@ -1,0 +1,23 @@
+{{template "head" .}}
+{{template "nav" .}}
+<main>
+  <h1>Maintenance</h1>
+  {{template "messages" .}}
+  <section>
+    <h2>Flush one name</h2>
+    <form method="post" action="/maintenance" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <input type="hidden" name="action" value="flush_name">
+      <label>Name<input name="name" placeholder="example.com" required></label>
+      <button type="submit">Flush name cache</button>
+    </form>
+  </section>
+  <section>
+    <h2>Resolver-wide maintenance</h2>
+    <form method="post" action="/maintenance" class="button-row">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <button type="submit" name="action" value="flush_all">Flush entire cache</button>
+      <button type="submit" name="action" value="flush_bogus">Flush DNSSEC bogus cache</button>
+    </form>
+  </section>
+{{template "foot" .}}

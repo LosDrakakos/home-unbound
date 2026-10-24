@@ -1,0 +1,42 @@
+{{template "head" .}}
+{{template "nav" .}}
+<main>
+  <h1>Lookup / Verify</h1>
+  {{template "messages" .}}
+  <section>
+    <form method="post" action="/lookup" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Name<input name="name" value="{{.LookupName}}" placeholder="example.com" required></label>
+      <label>
+        Type
+        <select name="type">
+          {{range $type := listTypes}}<option>{{$type}}</option>{{end}}
+        </select>
+      </label>
+      <button type="submit">Query local resolver</button>
+    </form>
+  </section>
+  {{if .Lookup}}
+  <section>
+    <h2>Result: rcode {{.Lookup.RCode}}</h2>
+    {{if .Override}}
+    <p class="mode">{{.Override}}</p>
+    {{else}}
+    <p>No local record or zone override matched this name.</p>
+    {{end}}
+    <p class="mode {{if .Lookup.AD}}good{{end}}">DNSSEC validated (AD): <strong>{{.Lookup.AD}}</strong></p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Name</th><th>Type</th><th>TTL</th><th>Value</th></tr></thead>
+        <tbody>
+          {{range .Lookup.Answers}}
+          <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.TTL}}</td><td>{{.Value}}</td></tr>
+          {{else}}
+          <tr><td colspan="4">No answers.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{end}}
+{{template "foot" .}}

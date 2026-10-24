@@ -1,0 +1,20 @@
+{{template "head" .}}
+{{template "nav" .}}
+<main>
+  <h1>Reverse DNS</h1>
+  <p>Automatic PTR records follow their A or AAAA record. Explicit PTR records are managed on the Records page.</p>
+  <section>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>IP address</th><th>Hostname</th><th>Kind</th></tr></thead>
+        <tbody>
+          {{range .PTRs}}
+          <tr><td>{{.IP}}</td><td>{{.Name}}</td><td>{{.Kind}}</td></tr>
+          {{else}}
+          <tr><td colspan="3">No PTR records have been added.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{{template "foot" .}}

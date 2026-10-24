@@ -1,0 +1,17 @@
+{{template "head" .}}
+{{template "nav" .}}
+<main>
+  <h1>Live config</h1>
+  <section>
+    <h2>Generated local-records.conf</h2>
+    <pre>{{.Config}}</pre>
+  </section>
+  <section>
+    <h2>Unbound local zones</h2>
+    <pre>{{.ZonesLive}}</pre>
+  </section>
+  <section>
+    <h2>Unbound local data</h2>
+    <pre>{{.DataLive}}</pre>
+  </section>
+{{template "foot" .}}

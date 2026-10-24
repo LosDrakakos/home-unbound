@@ -1,0 +1,67 @@
+{{template "head" .}}
+{{template "nav" .}}
+<main>
+  <h1>Edit record</h1>
+  {{template "messages" .}}
+  {{with .Record}}
+  <form method="post" action="/records/{{.ID}}/edit" class="form-grid record-form">
+    <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+
+    <label>
+      Name
+      <input name="name" required placeholder="nas.home.arpa" value="{{inputValue $.Submitted "name" .Name}}">
+    </label>
+    <label>
+      Type
+      <select name="type">
+        {{range $type := listTypes}}
+        <option value="{{$type}}" {{if eq $type $.Record.Type}}selected{{end}}>{{$type}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label class="f-value conditional">
+      Value
+      <input name="value" placeholder="192.168.1.10 or nas.home.arpa" value="{{inputValue $.Submitted "value" .Value}}">
+    </label>
+    <label>
+      TTL
+      <input type="number" name="ttl" min="0" max="604800" value="{{inputValue $.Submitted "ttl" .TTL}}">
+    </label>
+
+    <p class="record-type-help help-a conditional">A record: enter an IPv4 address, for example <code>192.168.1.10</code>.</p>
+    <p class="record-type-help help-aaaa conditional">AAAA record: enter an IPv6 address, for example <code>fd00::10</code>.</p>
+    <p class="record-type-help help-cname conditional">CNAME record: enter the canonical hostname, for example <code>nas.home.arpa</code>.</p>
+    <p class="record-type-help help-txt conditional">TXT record: printable ASCII only; quotes and backslashes are rejected.</p>
+    <p class="f-ptr record-type-help help-ptr conditional">PTR name: use <code>192.168.1.10</code> or <code>10.1.168.192.in-addr.arpa</code>.</p>
+
+    <fieldset class="f-mx conditional conditional-grid">
+      <legend>MX fields</legend>
+      <label>Preference<input type="number" name="preference" min="0" max="65535" value="{{inputValue $.Submitted "preference" .Preference}}"></label>
+      <label>Mail exchanger<input name="exchange" placeholder="mail.home.arpa" value="{{inputValue $.Submitted "exchange" .Exchange}}"></label>
+      <p class="record-type-help">Lower preference values are tried first.</p>
+    </fieldset>
+
+    <fieldset class="f-srv conditional conditional-grid">
+      <legend>SRV fields</legend>
+      <label>Priority<input type="number" name="priority" min="0" max="65535" value="{{inputValue $.Submitted "priority" .Priority}}"></label>
+      <label>Weight<input type="number" name="weight" min="0" max="65535" value="{{inputValue $.Submitted "weight" .Weight}}"></label>
+      <label>Port<input type="number" name="port" min="0" max="65535" value="{{inputValue $.Submitted "port" .Port}}"></label>
+      <label>Target<input name="target" placeholder="sip.home.arpa" value="{{inputValue $.Submitted "target" .Target}}"></label>
+      <p class="record-type-help">Use a service owner such as <code>_sip._tcp.home.arpa</code>.</p>
+    </fieldset>
+
+    <label class="f-auto-ptr conditional check">
+      <input type="checkbox" name="ptr" {{if .PTR}}checked{{end}}>
+      Create a reverse PTR automatically
+    </label>
+    <label>
+      Comment
+      <input name="comment" value="{{inputValue $.Submitted "comment" .Comment}}">
+    </label>
+    <div class="button-row">
+      <button type="submit">Save and apply</button>
+      <a href="/records" class="button-link secondary">Cancel</a>
+    </div>
+  </form>
+  {{end}}
+{{template "foot" .}}

@@ -1,0 +1,29 @@
+{{template "head" .}}
+{{template "nav" .}}
+<main>
+  <h1>Dashboard</h1>
+  {{template "messages" .}}
+
+  {{if and .RecursiveOK .DNSSECOK}}
+  <section class="mode good" aria-label="Resolver mode">
+    <strong>Mode: Recursive (no forwarders) — DNSSEC validation ON</strong>
+  </section>
+  {{else}}
+  <section class="mode bad" role="alert" aria-label="Resolver warning">
+    <strong>Resolver configuration warning</strong>
+    {{if not .RecursiveOK}}<p>Recursive-only mode is not assured because forwarders are configured.</p>{{end}}
+    {{if not .DNSSECOK}}<p>DNSSEC validation is not enabled in Unbound's module configuration.</p>{{end}}
+  </section>
+  {{end}}
+
+  <div class="grid">
+    <section>
+      <h2>Status, uptime, and version</h2>
+      <pre>{{.Status}}</pre>
+    </section>
+    <section>
+      <h2>Query and cache statistics</h2>
+      <pre>{{.Stats}}</pre>
+    </section>
+  </div>
+{{template "foot" .}}

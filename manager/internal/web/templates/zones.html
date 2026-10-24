@@ -1,0 +1,53 @@
+{{template "head" .}}
+{{template "nav" .}}
+<main>
+  <h1>Local zones</h1>
+  {{template "messages" .}}
+  <section>
+    <h2>Add a zone rule</h2>
+    <form method="post" action="/zones" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Domain<input name="name" required placeholder="lab.internal"></label>
+      <label>
+        Rule
+        <select name="type">
+          <option value="transparent">Add my records; resolve everything else normally</option>
+          <option value="static">Private domain — only my records exist</option>
+          <option value="redirect">Wildcard — answer subdomains with apex records</option>
+          <option value="always_nxdomain">Block (NXDOMAIN)</option>
+          <option value="always_refuse">Block (REFUSED)</option>
+        </select>
+      </label>
+      <label>Comment<input name="comment" placeholder="Home lab devices"></label>
+      <button type="submit">Add zone</button>
+    </form>
+  </section>
+  <section>
+    <h2>Configured zones</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Domain</th><th>Rule</th><th>Comment</th><th>Actions</th></tr></thead>
+        <tbody>
+          {{range .State.Zones}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td>{{zoneLabel .Type}}</td>
+            <td>{{if .Comment}}{{.Comment}}{{else}}—{{end}}</td>
+            <td>
+              <details>
+                <summary>Delete</summary>
+                <form method="post" action="/zones/{{.ID}}/delete">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                  <button type="submit" class="danger">Confirm delete</button>
+                </form>
+              </details>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4">No local zones have been added.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{{template "foot" .}}

@@ -1,0 +1,24 @@
+services:
+  unbound:
+    build: .
+    image: ${IMAGE:-home-unbound:local}
+    restart: unless-stopped
+    ports:
+      - "${DNS_BIND:-0.0.0.0}:${DNS_PORT:-53}:53/udp"
+      - "${DNS_BIND:-0.0.0.0}:${DNS_PORT:-53}:53/tcp"
+      - "${UI_BIND:-127.0.0.1}:${UI_PORT:-8080}:8080/tcp"
+    environment:
+      UI_PASSWORD: ${UI_PASSWORD:-}
+    volumes:
+      - unbound-data:/data
+      - ./config/custom.d:/etc/unbound/custom.d:ro
+    read_only: true
+    tmpfs:
+      - /run/unbound:uid=10053,gid=10053,mode=0750
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  unbound-data:

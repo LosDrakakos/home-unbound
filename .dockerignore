@@ -1,0 +1,8 @@
+.git
+.ai
+.cache
+**/.cache
+README.md
+compose.yaml
+tests
+Makefile

@@ -1,0 +1,108 @@
+{{template "head" .}}
+{{template "nav" .}}
+<main>
+  <h1>Records</h1>
+  <p>Changes apply immediately: Unbound validates and reloads the generated configuration while keeping its cache.</p>
+  {{template "messages" .}}
+
+  <section>
+    <h2>Add a record</h2>
+    <form method="post" action="/records" class="form-grid record-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+      <label>
+        Name
+        <input name="name" required placeholder="nas.home.arpa" value="{{with .Record}}{{inputValue $.Submitted "name" .Name}}{{end}}">
+      </label>
+      <label>
+        Type
+        <select name="type">
+          {{range $type := listTypes}}
+          <option value="{{$type}}" {{with $.Record}}{{if eq $type .Type}}selected{{end}}{{end}}>{{$type}}</option>
+          {{end}}
+        </select>
+      </label>
+      <label class="f-value conditional">
+        Value
+        <input name="value" placeholder="192.168.1.10 or nas.home.arpa" value="{{with .Record}}{{inputValue $.Submitted "value" .Value}}{{end}}">
+      </label>
+      <label>
+        TTL
+        <input type="number" name="ttl" min="0" max="604800" placeholder="3600" value="{{with .Record}}{{inputValue $.Submitted "ttl" .TTL}}{{end}}">
+      </label>
+
+      <p class="record-type-help help-a conditional">A record: enter an IPv4 address, for example <code>192.168.1.10</code>.</p>
+      <p class="record-type-help help-aaaa conditional">AAAA record: enter an IPv6 address, for example <code>fd00::10</code>.</p>
+      <p class="record-type-help help-cname conditional">CNAME record: enter the canonical hostname, for example <code>nas.home.arpa</code>.</p>
+      <p class="record-type-help help-txt conditional">TXT record: printable ASCII only; quotes and backslashes are rejected.</p>
+      <p class="f-ptr record-type-help help-ptr conditional">PTR name: use <code>192.168.1.10</code> or <code>10.1.168.192.in-addr.arpa</code>; value is the target hostname.</p>
+
+      <fieldset class="f-mx conditional conditional-grid">
+        <legend>MX fields</legend>
+        <label>
+          Preference
+          <input type="number" name="preference" min="0" max="65535" placeholder="10" value="{{with .Record}}{{inputValue $.Submitted "preference" .Preference}}{{end}}">
+        </label>
+        <label>
+          Mail exchanger
+          <input name="exchange" placeholder="mail.home.arpa" value="{{with .Record}}{{inputValue $.Submitted "exchange" .Exchange}}{{end}}">
+        </label>
+        <p class="record-type-help">Lower preference values are tried first.</p>
+      </fieldset>
+
+      <fieldset class="f-srv conditional conditional-grid">
+        <legend>SRV fields</legend>
+        <label>Priority<input type="number" name="priority" min="0" max="65535" placeholder="10" value="{{with .Record}}{{inputValue $.Submitted "priority" .Priority}}{{end}}"></label>
+        <label>Weight<input type="number" name="weight" min="0" max="65535" placeholder="5" value="{{with .Record}}{{inputValue $.Submitted "weight" .Weight}}{{end}}"></label>
+        <label>Port<input type="number" name="port" min="0" max="65535" placeholder="5060" value="{{with .Record}}{{inputValue $.Submitted "port" .Port}}{{end}}"></label>
+        <label>Target<input name="target" placeholder="sip.home.arpa" value="{{with .Record}}{{inputValue $.Submitted "target" .Target}}{{end}}"></label>
+        <p class="record-type-help">Use a service owner such as <code>_sip._tcp.home.arpa</code>.</p>
+      </fieldset>
+
+      <label class="f-auto-ptr conditional check">
+        <input type="checkbox" name="ptr" {{with .Record}}{{if .PTR}}checked{{end}}{{end}}>
+        Create a reverse PTR automatically
+      </label>
+      <label>
+        Comment
+        <input name="comment" placeholder="Living-room NAS" value="{{with .Record}}{{inputValue $.Submitted "comment" .Comment}}{{end}}">
+      </label>
+      <button type="submit">Add and apply</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Configured records</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Type</th><th>Value</th><th>TTL</th><th>Comment</th><th>Reverse</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          {{range .State.Records}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td>{{.Type}}</td>
+            <td>{{if .Value}}{{.Value}}{{else if .Exchange}}{{.Preference}} {{.Exchange}}{{else}}{{.Priority}} {{.Weight}} {{.Port}} {{.Target}}{{end}}</td>
+            <td>{{.TTL}}</td>
+            <td>{{if .Comment}}{{.Comment}}{{else}}—{{end}}</td>
+            <td>{{if .PTR}}<span class="badge">auto PTR</span>{{else}}—{{end}}</td>
+            <td class="actions">
+              <a href="/records/{{.ID}}/edit">Edit</a>
+              <details>
+                <summary>Delete</summary>
+                <form method="post" action="/records/{{.ID}}/delete">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                  <button type="submit" class="danger">Confirm delete</button>
+                </form>
+              </details>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="7">No local records have been added.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{{template "foot" .}}

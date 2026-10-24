@@ -1,0 +1,42 @@
+{{define "head"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Unbound Manager</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{{end}}
+
+{{define "nav"}}
+<header class="site-header">
+  <a class="brand" href="/">Unbound Manager</a>
+  <nav aria-label="Main navigation">
+    <a href="/" {{if eq .Current "dashboard"}}aria-current="page"{{end}}>Dashboard</a>
+    <a href="/records" {{if eq .Current "records"}}aria-current="page"{{end}}>Records</a>
+    <a href="/reverse" {{if eq .Current "reverse"}}aria-current="page"{{end}}>Reverse DNS</a>
+    <a href="/zones" {{if eq .Current "zones"}}aria-current="page"{{end}}>Zones</a>
+    <a href="/lookup" {{if eq .Current "lookup"}}aria-current="page"{{end}}>Lookup</a>
+    <a href="/config" {{if eq .Current "config"}}aria-current="page"{{end}}>Live config</a>
+    <a href="/maintenance" {{if eq .Current "maintenance"}}aria-current="page"{{end}}>Maintenance</a>
+  </nav>
+  <form method="post" action="/logout" class="logout-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <button type="submit" class="secondary">Log out</button>
+  </form>
+</header>
+{{end}}
+
+{{define "messages"}}
+  {{if .Flash}}<p class="flash" role="status">{{.Flash}}</p>{{end}}
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer>Local recursive DNS management</footer>
+</body>
+</html>
+{{end}}
