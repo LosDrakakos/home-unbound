@@ -1,0 +1,264 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  pull_request:
+  schedule:
+    # Scheduled rebuilds pick up new Unbound releases and base-image fixes.
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint GitHub Actions workflows
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run unit tests and vet
+        run: make test-unit
+
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test Unbound release discovery and verification
+        run: make test-fetch
+
+  build-test-publish:
+    needs:
+      - lint
+      - unit
+      - fetch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install integration-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y dnsutils
+
+      - name: Compute image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+          labels: |
+            org.opencontainers.image.title=home-unbound
+            org.opencontainers.image.description=Recursive DNSSEC-validating Unbound with a management UI in a scratch image
+
+      - name: Build image for integration tests
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+          tags: |
+            home-unbound:test
+            ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run integration tests against the built image
+        env:
+          IMAGE: home-unbound:test
+          SKIP_BUILD: '1'
+        run: bash tests/integration.sh
+
+      - name: Read the Unbound version from the image
+        id: unbound
+        shell: bash
+        run: |
+          set -euo pipefail
+          output=$(docker run --rm --entrypoint /usr/local/sbin/unbound home-unbound:test -V 2>&1)
+          printf '%s\n' "$output"
+          version=$(awk '$1 == "Version" && $2 ~ /^[0-9]+\.[0-9]+\.[0-9]+$/ { print $2; exit }' <<<"$output")
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Could not read a valid X.Y.Z Unbound version from the tested image" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the tested image
+        if: github.event_name != 'pull_request'
+        id: publish
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          METADATA_TAGS: ${{ steps.meta.outputs.tags }}
+          UNBOUND_VERSION: ${{ steps.unbound.outputs.version }}
+        run: |
+          set -euo pipefail
+          mapfile -t metadata_tags < <(sed '/^[[:space:]]*$/d' <<<"$METADATA_TAGS")
+          tags=("${metadata_tags[@]}" "${IMAGE_NAME}:unbound-${UNBOUND_VERSION}")
+          digest=''
+          pushed_tags=()
+
+          for tag in "${tags[@]}"; do
+            if [[ "$tag" != "${IMAGE_NAME}:"* ]]; then
+              echo "Refusing to push a tag outside the expected image repository: $tag" >&2
+              exit 1
+            fi
+            tag_name=${tag#"${IMAGE_NAME}:"}
+            if [[ ! "$tag_name" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+              echo "Refusing to push unexpected image tag: $tag" >&2
+              exit 1
+            fi
+            docker tag home-unbound:test "$tag"
+            push_output=$(docker push "$tag" 2>&1)
+            printf '%s\n' "$push_output"
+            tag_digest=$(sed -nE 's/^.*digest: (sha256:[0-9a-f]{64}).*$/\1/p' <<<"$push_output" | tail -n 1)
+            if [[ ! "$tag_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Could not determine the manifest digest pushed for $tag" >&2
+              exit 1
+            fi
+            if [[ -n "$digest" && "$tag_digest" != "$digest" ]]; then
+              echo "Pushed tags do not resolve to the same manifest digest" >&2
+              echo "Expected $digest but $tag resolved to $tag_digest" >&2
+              exit 1
+            fi
+            digest=$tag_digest
+            pushed_tags+=("$tag")
+          done
+
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo 'tags<<PUSHED_TAGS'
+            printf '%s\n' "${pushed_tags[@]}"
+            echo 'PUSHED_TAGS'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Attest the published image
+        if: github.event_name != 'pull_request'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+
+      - name: Check whether the GHCR package is public
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set +e
+          repository_path=${IMAGE_NAME#ghcr.io/}
+          package_name=${repository_path##*/}
+          package_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pkgs/container/${package_name}"
+          token_response=$(curl -fsS --get \
+            --data-urlencode 'service=ghcr.io' \
+            --data-urlencode "scope=repository:${repository_path}:pull" \
+            https://ghcr.io/token 2>/dev/null)
+          token=$(jq -r '.token // .access_token // empty' <<<"$token_response" 2>/dev/null)
+          status=000
+          if [[ -n "$token" ]]; then
+            status=$(curl -sS -o /dev/null -w '%{http_code}' --head \
+              -H "Authorization: Bearer $token" \
+              -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+              -H 'Accept: application/vnd.oci.image.index.v1+json' \
+              -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+              -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+              "https://ghcr.io/v2/${repository_path}/manifests/${IMAGE_DIGEST}" 2>/dev/null)
+          fi
+
+          if [[ "$status" == 200 ]]; then
+            echo "✅ GHCR package is publicly and anonymously pullable." >> "$GITHUB_STEP_SUMMARY"
+          else
+            message="GHCR package is not anonymously pullable (HTTP ${status}) and is private. Open ${package_url}, choose Package settings, then in Danger Zone choose Change visibility → Public. This change is irreversible."
+            echo "::warning::$message"
+            printf '⚠️ %s\n' "$message" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+
+      - name: Summarize the publication
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+          PUSHED_TAGS: ${{ steps.publish.outputs.tags }}
+          UNBOUND_VERSION: ${{ steps.unbound.outputs.version }}
+        run: |
+          # shellcheck disable=SC2016
+          # The printf backticks below are literal Markdown delimiters.
+          {
+            echo '## Published image'
+            echo
+            printf -- '- Unbound version: `%s`\n' "$UNBOUND_VERSION"
+            printf -- '- Manifest digest: `%s`\n' "$IMAGE_DIGEST"
+            echo '- Tags:'
+            while IFS= read -r tag; do
+              [[ -n "$tag" ]] && printf '  - `%s`\n' "$tag"
+            done <<<"$PUSHED_TAGS"
+            echo
+            echo 'Pull the immutable digest:'
+            echo '```sh'
+            printf 'docker pull %s@%s\n' "$IMAGE_NAME" "$IMAGE_DIGEST"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

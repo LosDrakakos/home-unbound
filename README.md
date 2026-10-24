@@ -112,6 +112,35 @@ make test             # fetch, unit, and integration suites
 
 The Docker build itself runs `go vet ./...` and `go test ./...` before it can build the manager binary.
 
+## CI and published image
+
+GitHub Actions lints the workflow definitions with actionlint, runs the unit tests and Go vet, runs the Unbound release-discovery and signature-verification tests, and runs the full image integration suite. The integration suite includes live recursive DNS and DNSSEC checks from the GitHub-hosted runner. Once those checks pass, non-pull-request runs publish the exact tested image to `ghcr.io/<owner>/<repo>` rather than rebuilding it.
+
+Published tags are:
+
+- `latest` for the default `main` branch;
+- `X.Y.Z` and `X.Y` for a Git tag named `vX.Y.Z`;
+- `sha-xxxxxxx` for the source commit; and
+- `unbound-X.Y.Z` for the Unbound version compiled into the image.
+
+A weekly scheduled rebuild picks up new stable Unbound releases and base-image fixes even when the repository has not changed. GitHub automatically disables scheduled workflows after 60 days without repository activity, so re-enable the workflow if that happens.
+
+Each publication includes a build provenance attestation. Verify the current default-branch image with:
+
+```sh
+gh attestation verify oci://ghcr.io/<owner>/<repo>:latest --owner <owner>
+```
+
+GHCR always creates a new package as private, and GitHub provides no API for changing container-package visibility. After the first successful publication, open `https://github.com/<owner>/<repo>/pkgs/container/<repo>`, choose **Package settings**, then in **Danger Zone** choose **Change visibility → Public**. This one-time change is irreversible. The workflow checks anonymous pull access after every publication and emits a warning until the package is public.
+
+The workflow declares `packages: write` for its publishing job. In the repository, check **Settings → Actions → General → Workflow permissions** to ensure workflows may write packages; the job's explicit permission is sufficient unless an organization policy restricts it.
+
+Run the published image with the existing Compose configuration:
+
+```sh
+IMAGE=ghcr.io/<owner>/<repo>:latest docker compose up -d --no-build
+```
+
 ## Unbound version
 
 Every default image build discovers and compiles the latest stable Unbound release from the NLnet Labs download index. Only names exactly matching `unbound-X.Y.Z.tar.gz` participate, so release candidates such as `1.27.0rc1` are ignored and version components are compared numerically.

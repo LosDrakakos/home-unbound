@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image=home-unbound:test
+image=${IMAGE:-home-unbound:test}
 name="home-unbound-test-${RANDOM}"
 volume="home-unbound-test-${RANDOM}"
 password='integration-secret'
@@ -152,7 +152,14 @@ for tool in docker dig curl jq; do
   need "$tool"
 done
 
-docker build -t "$image" .
+if [[ ${SKIP_BUILD:-0} == 1 ]]; then
+  docker image inspect "$image" >/dev/null 2>&1 || {
+    echo "SKIP_BUILD=1 but image does not exist locally: $image" >&2
+    exit 1
+  }
+else
+  docker build -t "$image" .
+fi
 
 upstream_index="$tmp_dir/unbound-index.html"
 curl -fsSL --proto '=https' --tlsv1.2 --retry 3 \
