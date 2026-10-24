@@ -11,7 +11,13 @@ docker compose up -d --build
 docker compose logs unbound
 ```
 
-The first start generates an admin password, writes it to `/data/manager/ui-password` with mode `0600`, and prints it once. Later starts log only the file location. Open <http://127.0.0.1:8080/>. To supply a password instead, set `UI_PASSWORD`, or mount a secret and set `UI_PASSWORD_FILE`.
+The first start generates an admin password, writes it to `/data/manager/ui-password` with mode `0600`, and prints it once. Read the generated password at any time with the manager command below, then open <http://127.0.0.1:8080/>:
+
+```sh
+docker compose exec unbound /usr/local/bin/unbound-manager password
+```
+
+To supply a password instead, set `UI_PASSWORD`, or mount a secret and set `UI_PASSWORD_FILE`. In that case, the `password` command reports which setting supplies the password but does not print the configured secret.
 
 Compose publishes DNS on host TCP and UDP port 53, while the UI is bound to localhost only. Resolver data and UI credentials persist in the `unbound-data` volume. The root filesystem is read-only; `/run/unbound` is a UID-10053 tmpfs.
 
@@ -97,14 +103,47 @@ Common container settings are `DATA_DIR` (default `/data`), `UI_LISTEN` (default
 Host prerequisites for the integration suite are Docker, `dig`, `curl`, and `jq`.
 
 ```sh
+make test-fetch       # release selection, downgrade floor, signature and checksum verification
 make test-unit        # Go vet and unit tests in the pinned Go container
 make build
 make test-integration # scratch/image, recursion, DNSSEC, API, records, PTR, persistence
-make test             # both suites
+make test             # fetch, unit, and integration suites
 ```
 
 The Docker build itself runs `go vet ./...` and `go test ./...` before it can build the manager binary.
 
-## Upgrading Unbound
+## Unbound version
 
-Update both `UNBOUND_VERSION` and `UNBOUND_SHA256` in [`Dockerfile`](Dockerfile). Obtain the release checksum from NLnet Labs, then rebuild and run the complete integration suite. The build verifies the tarball, static linkage, and that the generated RFC 5011 seed includes root KSK tags 20326 and 38696. `unbound-anchor` writes those numeric key IDs in the generated DNSKEY metadata; checking both IDs prevents silently shipping a stale rollover seed.
+Every default image build discovers and compiles the latest stable Unbound release from the NLnet Labs download index. Only names exactly matching `unbound-X.Y.Z.tar.gz` participate, so release candidates such as `1.27.0rc1` are ignored and version components are compared numerically.
+
+The downloaded tarball is accepted only when all of these checks pass:
+
+- its detached OpenPGP signature verifies with the pinned **NLnet Labs releases signing key G2**;
+- the keyring contains exactly fingerprint `231018690C4D903EF419146AA144323DEAACDF45`;
+- the separately published `.sha256` digest matches; and
+- the resolved release is at least `UNBOUND_MIN_VERSION`, currently `1.26.2`, to prevent downgrade to an older but validly signed release.
+
+The Dockerfile uses a remote `ADD` of the release index. BuildKit checks that URL on each build and invalidates the download and compile layers when its contents change; otherwise those layers remain cached. Use `docker build --no-cache ...` when a full rebuild is required.
+
+An exact release can be selected explicitly when reproducibility or rollback testing requires it:
+
+```sh
+docker build --build-arg UNBOUND_VERSION=1.26.2 -t home-unbound:local .
+```
+
+For Compose, add the argument under the service's build configuration:
+
+```yaml
+services:
+  unbound:
+    build:
+      context: .
+      args:
+        UNBOUND_VERSION: 1.26.2
+```
+
+The minimum-version floor still applies to explicitly selected versions. Raise `UNBOUND_MIN_VERSION` periodically after security and compatibility testing. `UNBOUND_SHA256` remains available as an optional additional build argument when an independently obtained digest should also be pinned.
+
+When NLnet Labs rotates its release key, download the replacement from <https://nlnetlabs.nl/downloads/keys/>, verify its fingerprint through an independent out-of-band source, then update both [`build/keys/nlnetlabs-releases-g2.asc`](build/keys/nlnetlabs-releases-g2.asc) and the pinned fingerprint in [`build/fetch-unbound.sh`](build/fetch-unbound.sh). Never update the key merely because a build started failing.
+
+The build also verifies static linkage and checks that the generated RFC 5011 seed includes root KSK tags 20326 and 38696.

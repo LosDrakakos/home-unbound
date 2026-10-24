@@ -74,11 +74,13 @@ func main() {
 	case "ctl":
 		p := getPaths()
 		err = runControlCommand(os.Args[2:], control.New(p.socket), os.Stdout)
+	case "password":
+		err = showPassword(getPaths(), os.Stdout, os.Stderr)
 	case "version":
 		fmt.Println(version)
 		return
 	default:
-		err = fmt.Errorf("unknown command %q (use run, healthcheck, ctl, or version)", cmd)
+		err = fmt.Errorf("unknown command %q (use run, healthcheck, ctl, password, or version)", cmd)
 	}
 	if err != nil {
 		log.Printf("unbound-manager: %v", err)
@@ -379,7 +381,7 @@ func loadPassword(p paths) (string, error) {
 	}
 	path := filepath.Join(p.data, "manager/ui-password")
 	if b, err := os.ReadFile(path); err == nil {
-		log.Printf("UI password is stored at %s", path)
+		log.Printf("UI password is stored at %s; run /usr/local/bin/unbound-manager password inside the container to print it", path)
 		return strings.TrimSpace(string(b)), nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
@@ -393,6 +395,30 @@ func loadPassword(p paths) (string, error) {
 		return "", err
 	}
 	log.Printf("generated UI password: %s", v)
-	log.Printf("stored at %s; it will not be logged again", path)
+	log.Printf("stored at %s; run /usr/local/bin/unbound-manager password inside the container to print it later", path)
 	return v, nil
+}
+
+func showPassword(p paths, stdout, stderr io.Writer) error {
+	if os.Getenv("UI_PASSWORD") != "" {
+		_, err := fmt.Fprintln(stderr, "UI password is supplied via UI_PASSWORD; no password was printed")
+		return err
+	}
+	if os.Getenv("UI_PASSWORD_FILE") != "" {
+		_, err := fmt.Fprintln(stderr, "UI password is supplied via UI_PASSWORD_FILE; no password was printed")
+		return err
+	}
+	path := filepath.Join(p.data, "manager/ui-password")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read generated UI password at %s: %w", path, err)
+	}
+	password := strings.TrimSpace(string(b))
+	if password == "" {
+		return fmt.Errorf("generated UI password at %s is empty", path)
+	}
+	if _, err := fmt.Fprintln(stdout, password); err != nil {
+		return fmt.Errorf("write UI password: %w", err)
+	}
+	return nil
 }

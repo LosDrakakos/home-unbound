@@ -3,13 +3,23 @@ ARG ALPINE_VERSION=3.24.3
 ARG GO_IMAGE=golang:1.27.3-alpine3.24
 
 FROM alpine:${ALPINE_VERSION} AS unbound-build
-ARG UNBOUND_VERSION=1.26.2
-ARG UNBOUND_SHA256=d8ee7aa6bbb3ff1be7d9e57637d0d0ec2f18273a8efff1a0afe2c665858b96f7
-RUN apk add --no-cache build-base ca-certificates curl file openssl-dev openssl-libs-static expat-dev expat-static libevent-dev libevent-static
+ARG UNBOUND_VERSION=latest
+ARG UNBOUND_MIN_VERSION=1.26.2
+ARG UNBOUND_SHA256=
+RUN apk add --no-cache build-base ca-certificates curl file gnupg openssl-dev openssl-libs-static expat-dev expat-static libevent-dev libevent-static
 WORKDIR /build
-RUN curl -fL --retry 3 -o unbound.tar.gz "https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz" \
- && printf '%s  %s\n' "$UNBOUND_SHA256" unbound.tar.gz | sha256sum -c - \
- && tar -xzf unbound.tar.gz --strip-components=1
+COPY build/fetch-unbound.sh /build/fetch-unbound.sh
+COPY build/keys/nlnetlabs-releases-g2.asc /build/keys/nlnetlabs-releases-g2.asc
+ADD https://nlnetlabs.nl/downloads/unbound/ /build/unbound-index.html
+RUN UNBOUND_VERSION="$UNBOUND_VERSION" \
+    UNBOUND_MIN_VERSION="$UNBOUND_MIN_VERSION" \
+    UNBOUND_SHA256="$UNBOUND_SHA256" \
+    UNBOUND_INDEX_FILE=/build/unbound-index.html \
+    UNBOUND_KEY_FILE=/build/keys/nlnetlabs-releases-g2.asc \
+    UNBOUND_TARGET_DIR=/build/unbound-src \
+    UNBOUND_VERSION_FILE=/build/UNBOUND_VERSION \
+    sh /build/fetch-unbound.sh
+WORKDIR /build/unbound-src
 RUN LDFLAGS="-static" ./configure \
       --prefix=/usr/local \
       --sysconfdir=/etc \

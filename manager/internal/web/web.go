@@ -125,7 +125,8 @@ func New(c Config) (http.Handler, error) {
 	m.HandleFunc("POST /api/zones", s.apiAuth(s.apiZones))
 	m.HandleFunc("DELETE /api/zones/{id}", s.apiAuth(s.apiDeleteZone))
 	m.HandleFunc("GET /api/status", s.apiAuth(s.apiStatus))
-	return s.headers(m), nil
+	crossOrigin := http.NewCrossOriginProtection()
+	return s.headers(crossOrigin.Handler(m)), nil
 }
 
 func (s *Server) headers(next http.Handler) http.Handler {
@@ -133,7 +134,7 @@ func (s *Server) headers(next http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Referrer-Policy", "same-origin")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -194,21 +195,13 @@ func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if r.Method != "GET" && r.Method != "HEAD" {
-			if !s.safeOrigin(r) || subtle.ConstantTimeCompare([]byte(r.FormValue("csrf_token")), []byte(sess.CSRF)) != 1 {
+			if subtle.ConstantTimeCompare([]byte(r.FormValue("csrf_token")), []byte(sess.CSRF)) != 1 {
 				http.Error(w, "invalid CSRF token", http.StatusForbidden)
 				return
 			}
 		}
 		next(w, r)
 	}
-}
-func (s *Server) safeOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin != "" {
-		return origin == "http://"+r.Host || origin == "https://"+r.Host
-	}
-	ref := r.Header.Get("Referer")
-	return ref == "" || strings.HasPrefix(ref, "http://"+r.Host+"/") || strings.HasPrefix(ref, "https://"+r.Host+"/")
 }
 func (s *Server) clientKey(r *http.Request) string {
 	p := r.RemoteAddr
@@ -222,10 +215,6 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	key := s.clientKey(r)
-	if !s.safeOrigin(r) {
-		http.Error(w, "cross-origin request rejected", http.StatusForbidden)
-		return
-	}
 	s.mu.Lock()
 	s.purgeLocked(time.Now())
 	s.mu.Unlock()
@@ -563,10 +552,7 @@ func (s *Server) maintenance(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		basic := false
-		if _, p, ok := r.BasicAuth(); ok && secureEqual(p, s.password) {
-			basic = true
-		} else {
+		if _, p, ok := r.BasicAuth(); !ok || !secureEqual(p, s.password) {
 			_, sess := s.getSession(r)
 			if sess == nil {
 				w.Header().Set("WWW-Authenticate", `Basic realm="unbound-manager"`)
@@ -574,15 +560,11 @@ func (s *Server) apiAuth(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			if r.Method != "GET" && r.Method != "HEAD" {
-				if !s.safeOrigin(r) || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(sess.CSRF)) != 1 {
+				if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(sess.CSRF)) != 1 {
 					http.Error(w, "invalid CSRF token", 403)
 					return
 				}
 			}
-		}
-		if basic && !s.safeOrigin(r) {
-			http.Error(w, "cross-origin request rejected", 403)
-			return
 		}
 		next(w, r)
 	}

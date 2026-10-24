@@ -218,6 +218,110 @@ func TestSecurityHeaders(t *testing.T) {
 			t.Errorf("missing %s", name)
 		}
 	}
+	if got := r.Header().Get("Referrer-Policy"); got != "same-origin" {
+		t.Errorf("Referrer-Policy = %q, want same-origin", got)
+	}
+}
+
+func TestCrossOriginProtectionOnWrites(t *testing.T) {
+	tests := []struct {
+		name, origin, fetchSite string
+		wantAllowed             bool
+	}{
+		{name: "browser same origin with null origin", origin: "null", fetchSite: "same-origin", wantAllowed: true},
+		{name: "browser cross site", fetchSite: "cross-site", wantAllowed: false},
+		{name: "evil origin fallback", origin: "http://evil.example", wantAllowed: false},
+		{name: "non browser client", wantAllowed: true},
+	}
+	setOriginHeaders := func(r *http.Request, test struct {
+		name, origin, fetchSite string
+		wantAllowed             bool
+	}) {
+		if test.origin != "" {
+			r.Header.Set("Origin", test.origin)
+		}
+		if test.fetchSite != "" {
+			r.Header.Set("Sec-Fetch-Site", test.fetchSite)
+		}
+	}
+
+	for _, test := range tests {
+		t.Run("login/"+test.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			body := url.Values{"password": {"secret"}}.Encode()
+			r := httptest.NewRequest("POST", "http://example.test/login", strings.NewReader(body))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			setOriginHeaders(r, test)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			want := http.StatusForbidden
+			if test.wantAllowed {
+				want = http.StatusSeeOther
+			}
+			if w.Code != want {
+				t.Fatalf("status=%d, want %d; body=%s", w.Code, want, w.Body.String())
+			}
+		})
+
+		t.Run("session record form/"+test.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			cookie := login(t, h)
+			csrf := csrfToken(t, h, cookie, "/records")
+			body := url.Values{"csrf_token": {csrf}, "name": {"origin.example"}, "type": {"A"}, "value": {"192.0.2.20"}}.Encode()
+			r := httptest.NewRequest("POST", "http://example.test/records", strings.NewReader(body))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			r.AddCookie(cookie)
+			setOriginHeaders(r, test)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			want := http.StatusForbidden
+			if test.wantAllowed {
+				want = http.StatusSeeOther
+			}
+			if w.Code != want {
+				t.Fatalf("status=%d, want %d; body=%s", w.Code, want, w.Body.String())
+			}
+		})
+
+		t.Run("API Basic write/"+test.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			payload := []byte(`{"name":"api-origin.example","type":"A","value":"192.0.2.21"}`)
+			r := httptest.NewRequest("POST", "http://example.test/api/records", bytes.NewReader(payload))
+			r.Header.Set("Content-Type", "application/json")
+			r.SetBasicAuth("admin", "secret")
+			setOriginHeaders(r, test)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			want := http.StatusForbidden
+			if test.wantAllowed {
+				want = http.StatusCreated
+			}
+			if w.Code != want {
+				t.Fatalf("status=%d, want %d; body=%s", w.Code, want, w.Body.String())
+			}
+		})
+
+		t.Run("API session write/"+test.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			cookie := login(t, h)
+			csrf := csrfToken(t, h, cookie, "/records")
+			payload := []byte(`{"name":"api-session-origin.example","type":"A","value":"192.0.2.22"}`)
+			r := httptest.NewRequest("POST", "http://example.test/api/records", bytes.NewReader(payload))
+			r.Header.Set("Content-Type", "application/json")
+			r.Header.Set("X-CSRF-Token", csrf)
+			r.AddCookie(cookie)
+			setOriginHeaders(r, test)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			want := http.StatusForbidden
+			if test.wantAllowed {
+				want = http.StatusCreated
+			}
+			if w.Code != want {
+				t.Fatalf("status=%d, want %d; body=%s", w.Code, want, w.Body.String())
+			}
+		})
+	}
 }
 
 func TestRecordFromFormRejectsInvalidNumbersAndIgnoresID(t *testing.T) {

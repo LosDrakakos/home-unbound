@@ -19,12 +19,12 @@ container_logs() {
 }
 
 compose_run() {
-  IMAGE="$image" \
+  env -u UI_PASSWORD \
+    IMAGE="$image" \
     DNS_BIND=127.0.0.1 \
     DNS_PORT="$compose_dns_port" \
     UI_BIND=127.0.0.1 \
     UI_PORT="$compose_ui_port" \
-    UI_PASSWORD="$password" \
     docker compose -p "$compose_project" "$@"
 }
 
@@ -154,6 +154,17 @@ done
 
 docker build -t "$image" .
 
+upstream_index="$tmp_dir/unbound-index.html"
+curl -fsSL --proto '=https' --tlsv1.2 --retry 3 \
+  -o "$upstream_index" https://nlnetlabs.nl/downloads/unbound/
+FETCH_UNBOUND_SOURCE_ONLY=1 . "$PWD/build/fetch-unbound.sh"
+unset FETCH_UNBOUND_SOURCE_ONLY
+upstream_version=$(select_latest_version "$upstream_index")
+unbound_version_output=$(docker run --rm --entrypoint /usr/local/sbin/unbound "$image" -V 2>&1)
+built_version=$(awk '$1 == "Version" && $2 ~ /^[0-9]+\.[0-9]+\.[0-9]+$/ { print $2; exit }' <<<"$unbound_version_output")
+assert_nonempty 'read built Unbound version' "$built_version"
+assert_equal 'image uses latest upstream stable Unbound' "$upstream_version" "$built_version"
+
 if docker run --rm --entrypoint /bin/sh "$image" -c true 2>/dev/null; then
   echo 'final image unexpectedly contains /bin/sh' >&2
   exit 1
@@ -275,9 +286,13 @@ assert_nonempty 'resolver survives injection attempts' "$output"
 
 login_html=$(curl -fsS -c "$cookie_jar" "$ui_url/login")
 [[ "$login_html" == *'Unbound Manager'* ]] || fail_output 'login page content' 'Unbound Manager' "$login_html"
-status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" \
+status=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Origin: null' -H 'Sec-Fetch-Site: cross-site' \
   --data-urlencode "password=$password" "$ui_url/login")
-assert_equal 'browser login redirect' '303' "$status"
+assert_equal 'browser cross-site login rejected' '403' "$status"
+status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" \
+  -H 'Origin: null' -H 'Sec-Fetch-Site: same-origin' \
+  --data-urlencode "password=$password" "$ui_url/login")
+assert_equal 'browser same-origin login with null Origin redirects' '303' "$status"
 records_html=$(curl -fsS -b "$cookie_jar" "$ui_url/records")
 csrf=$(awk 'match($0, /name="csrf_token" value="[^"]+"/) { value=substr($0, RSTART, RLENGTH); sub(/^.*value="/, "", value); sub(/"$/, "", value); print value; exit }' <<<"$records_html")
 assert_nonempty 'records form CSRF token' "$csrf"
@@ -286,6 +301,7 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" \
   --data-urlencode 'value=192.168.77.21' "$ui_url/records")
 assert_equal 'browser form rejects missing CSRF token' '403' "$status"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$cookie_jar" \
+  -H 'Origin: null' -H 'Sec-Fetch-Site: same-origin' \
   --data-urlencode "csrf_token=$csrf" --data-urlencode 'name=form.home.arpa' --data-urlencode 'type=A' \
   --data-urlencode 'value=192.168.77.20' --data-urlencode 'ptr=on' "$ui_url/records")
 assert_equal 'browser record creation redirect' '303' "$status"
@@ -310,10 +326,15 @@ compose_run up -d --no-build --wait
 compose_container=$(compose_run ps -q unbound)
 assert_nonempty 'compose service container ID' "$compose_container"
 assert_no_fd_warnings "$compose_container"
+compose_password=$(docker exec "$compose_container" /usr/local/bin/unbound-manager password)
+assert_nonempty 'compose generated UI password' "$compose_password"
 output=$(run_dig 'compose recursive lookup' @127.0.0.1 -p "$compose_dns_port" example.com A +short)
 assert_nonempty 'compose recursive lookup' "$output"
 login_html=$(curl -fsS "http://127.0.0.1:$compose_ui_port/login")
 [[ "$login_html" == *'Unbound Manager'* ]] || fail_output 'compose UI login page' 'Unbound Manager' "$login_html"
+status=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Origin: null' -H 'Sec-Fetch-Site: same-origin' \
+  --data-urlencode "password=$compose_password" "http://127.0.0.1:$compose_ui_port/login")
+assert_equal 'compose login with generated password' '303' "$status"
 compose_run down -v
 compose_started=0
 
